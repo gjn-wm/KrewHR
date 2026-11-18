@@ -30,7 +30,10 @@ import com.example.ui.theme.TealPrimary
 import com.example.ui.theme.TealPrimaryDark
 
 @Composable
-fun AuthScreen(onAuthSuccess: () -> Unit) {
+fun AuthScreen(
+    onAuthSuccess: () -> Unit,
+    onSkipSignIn: () -> Unit = {}
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val credentialManager = remember { CredentialManager.create(context) }
@@ -162,7 +165,7 @@ fun AuthScreen(onAuthSuccess: () -> Unit) {
                                 scope = scope,
                                 onAuthCancelled = {
                                     isLoading = false
-                                    errorMessage = "Sign-in was cancelled. Select a Google account to continue."
+                                    errorMessage = "Sign-in was cancelled. Select a Google account or skip below for offline preview."
                                 }
                             )
                         },
@@ -184,6 +187,18 @@ fun AuthScreen(onAuthSuccess: () -> Unit) {
                             Spacer(modifier = Modifier.width(10.dp))
                             Text("Sign in with Google", style = MaterialTheme.typography.labelLarge)
                         }
+                    }
+
+                    OutlinedButton(
+                        onClick = onSkipSignIn,
+                        enabled = !isLoading,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("skip_sign_in_button"),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Text("Skip Sign-In (Offline 50-Staff Preview)")
                     }
                 }
             }

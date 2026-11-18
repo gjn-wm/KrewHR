@@ -28,6 +28,7 @@ import com.example.data.HrmsRepository
 import com.example.data.VerificationMode
 import com.example.ui.HrmsRootState
 import com.example.ui.HrmsViewModel
+import com.example.ui.LocalPreviewViewModel
 import com.example.ui.components.NotificationsSheet
 import com.example.ui.screens.*
 import com.example.ui.theme.KrewHrTheme
@@ -65,11 +66,10 @@ private val NAV_TABS = listOf(
 @Composable
 fun AppNavigation(auth: FirebaseAuth = Firebase.auth) {
     val currentUser by auth.authStateFlow().collectAsStateWithLifecycle(initialValue = auth.currentUser)
+    var localPreviewActive by remember { mutableStateOf(false) }
     val user = currentUser
 
-    if (user == null) {
-        AuthScreen(onAuthSuccess = {})
-    } else {
+    if (user != null) {
         key(user.uid) {
             KrewHrSignedInShell(
                 currentUserId = user.uid,
@@ -77,6 +77,179 @@ fun AppNavigation(auth: FirebaseAuth = Firebase.auth) {
                 userEmail = user.email ?: ""
             )
         }
+    } else if (localPreviewActive) {
+        KrewHrPreviewShell(onExitPreview = { localPreviewActive = false })
+    } else {
+        AuthScreen(
+            onAuthSuccess = {},
+            onSkipSignIn = { localPreviewActive = true }
+        )
+    }
+}
+
+@Composable
+private fun KrewHrPreviewShell(onExitPreview: () -> Unit) {
+    val viewModel: LocalPreviewViewModel = viewModel(key = "local_preview")
+    val bundle by viewModel.bundle.collectAsStateWithLifecycle()
+    val profile by viewModel.userProfile.collectAsStateWithLifecycle()
+    val mfaUnlocked by viewModel.mfaUnlocked.collectAsStateWithLifecycle()
+    val snackbarMsg by viewModel.snackbarMessage.collectAsStateWithLifecycle()
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(snackbarMsg) {
+        snackbarMsg?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            viewModel.clearSnackbar()
+        }
+    }
+
+    var selectedTab by remember { mutableIntStateOf(0) }
+    var showNotifications by remember { mutableStateOf(false) }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val useRail = maxWidth >= 680.dp
+
+        Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            contentWindowInsets = WindowInsets.safeDrawing,
+            bottomBar = {
+                if (!useRail) {
+                    NavigationBar(windowInsets = WindowInsets.navigationBars) {
+                        NAV_TABS.forEachIndexed { index, tab ->
+                            val selected = selectedTab == index
+                            NavigationBarItem(
+                                selected = selected,
+                                onClick = { selectedTab = index },
+                                icon = {
+                                    Icon(
+                                        if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                        contentDescription = tab.label
+                                    )
+                                },
+                                label = { Text(tab.label) },
+                                modifier = Modifier.testTag(tab.testTag)
+                            )
+                        }
+                    }
+                }
+            }
+        ) { innerPadding ->
+            Row(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                if (useRail) {
+                    NavigationRail {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        NAV_TABS.forEachIndexed { index, tab ->
+                            val selected = selectedTab == index
+                            NavigationRailItem(
+                                selected = selected,
+                                onClick = { selectedTab = index },
+                                icon = {
+                                    Icon(
+                                        if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                        contentDescription = tab.label
+                                    )
+                                },
+                                label = { Text(tab.label) },
+                                modifier = Modifier.testTag(tab.testTag)
+                            )
+                        }
+                    }
+                }
+
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    Box(modifier = Modifier.widthIn(max = 840.dp).fillMaxHeight().align(Alignment.TopCenter)) {
+                        when (selectedTab) {
+                            0 -> HomeScreen(
+                                bundle = bundle,
+                                userName = viewModel.previewName,
+                                isBusy = false,
+                                onQuickCheckIn = {
+                                    viewModel.checkIn(VerificationMode.ONE_TAP, "Mobile 1-Tap Check-In", 0.0, 0.0, false, "09:00 - 18:00")
+                                },
+                                onQuickCheckOut = { rec -> viewModel.checkOut(rec) },
+                                onApproveLeave = { id, ok -> viewModel.decideLeave(id, ok) },
+                                onApproveExpense = { id, st -> viewModel.updateServiceStatus(id, st) },
+                                onNavigateTab = { selectedTab = it },
+                                onOpenNotifications = { showNotifications = true }
+                            )
+
+                            1 -> PeopleScreen(
+                                bundle = bundle,
+                                onAddEmployee = { name, title, dept, role, email, mgr, mode, shift, salary ->
+                                    viewModel.addEmployee(name, title, dept, role, email, mgr, mode, shift, salary)
+                                },
+                                onUpdateEmployee = { id, shift, status, mode ->
+                                    viewModel.updateEmployeeShift(id, shift, status, mode)
+                                },
+                                onToggleTask = { viewModel.toggleOnboarding(it) },
+                                onAddTask = { empName, flow, title, cat, due ->
+                                    viewModel.addOnboardingTask(empName, flow, title, cat, due)
+                                }
+                            )
+
+                            2 -> TimeLeaveScreen(
+                                bundle = bundle,
+                                userName = viewModel.previewName,
+                                isBusy = false,
+                                onCheckIn = { mode, loc, lat, lon, selfie, shift ->
+                                    viewModel.checkIn(mode, loc, lat, lon, selfie, shift)
+                                },
+                                onCheckOut = { rec -> viewModel.checkOut(rec) },
+                                onSubmitLeave = { type, start, end, days, reason ->
+                                    viewModel.submitLeave(type, start, end, days, reason)
+                                },
+                                onDecideLeave = { id, ok -> viewModel.decideLeave(id, ok) },
+                                onShowMessage = { viewModel.showMessage(it) }
+                            )
+
+                            3 -> ChannelsScreen(
+                                bundle = bundle,
+                                onPostMessage = { channelId, postType, body, roleLabel ->
+                                    viewModel.postToChannel(channelId, postType, body, roleLabel)
+                                },
+                                onAcknowledgePost = { post -> viewModel.acknowledgePost(post) }
+                            )
+
+                            4 -> HubScreen(
+                                bundle = bundle,
+                                userProfile = profile,
+                                mfaUnlocked = mfaUnlocked,
+                                isBusy = false,
+                                onUnlockMfa = { viewModel.unlockMfaSession() },
+                                onRunPayroll = { period -> viewModel.runPayroll(period) },
+                                onMarkPayrollPaid = { id -> viewModel.markPayrollPaid(id) },
+                                onSubmitServiceItem = { kind, title, cat, desc, amt, att ->
+                                    viewModel.submitServiceItem(kind, title, cat, desc, amt, att)
+                                },
+                                onUpdateServiceStatus = { id, st -> viewModel.updateServiceStatus(id, st) },
+                                onSavePrivateProfile = { name, phone, addr, emg, bank, tax, mfa ->
+                                    viewModel.savePrivateProfile(name, phone, addr, emg, bank, tax, mfa)
+                                },
+                                onAddPerformanceItem = { kind, title, assignee, sub, rating ->
+                                    viewModel.addPerformanceItem(kind, title, assignee, sub, rating)
+                                },
+                                onUpdatePerformanceProgress = { id, progress ->
+                                    viewModel.updatePerformanceProgress(id, progress)
+                                },
+                                onUpdateWorkspaceIntegrations = { role, slack, bio, cal, fmt ->
+                                    viewModel.updateWorkspaceIntegrations(role, slack, bio, cal, fmt)
+                                },
+                                onSignOut = onExitPreview,
+                                onShowMessage = { viewModel.showMessage(it) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showNotifications) {
+        NotificationsSheet(
+            notifications = bundle.notifications,
+            onMarkAllRead = { viewModel.markNotificationsRead() },
+            onDismiss = { showNotifications = false }
+        )
     }
 }
 
