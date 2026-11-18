@@ -1,0 +1,6 @@
+{
+  "name": "KrewHR",
+  "description": "Custom HRMS mobile app for a 50-employee team with attendance, leave, payroll, onboarding, channels, self-service, performance, and HR analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,278 @@
+{
+  "entities": {
+    "UserPrivateProfile": {
+      "title": "UserPrivateProfile",
+      "description": "Private PII and security preferences isolated per authenticated user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID" },
+        "fullName": { "type": "string" },
+        "workEmail": { "type": "string" },
+        "phone": { "type": "string" },
+        "homeAddress": { "type": "string" },
+        "emergencyContact": { "type": "string" },
+        "bankAccountLast4": { "type": "string" },
+        "taxFilingStatus": { "type": "string", "enum": ["SINGLE", "MARRIED", "HEAD_OF_HOUSEHOLD"] },
+        "mfaLockEnabled": { "type": "boolean" },
+        "activeWorkspaceId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Client must submit FieldValue.serverTimestamp()" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Client must submit FieldValue.serverTimestamp()" }
+      },
+      "required": ["userId", "fullName", "workEmail", "taxFilingStatus", "mfaLockEnabled", "activeWorkspaceId", "createdAt", "updatedAt"]
+    },
+    "Workspace": {
+      "title": "Workspace",
+      "description": "50-employee HRMS organization workspace configuration.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "companyName": { "type": "string" },
+        "seatLimit": { "type": "integer" },
+        "activeSeatCount": { "type": "integer" },
+        "userRole": { "type": "string", "enum": ["HR_ADMIN", "MANAGER", "EMPLOYEE"] },
+        "slackWebhookUrl": { "type": "string" },
+        "biometricBadgeEnabled": { "type": "boolean" },
+        "calendarSyncEnabled": { "type": "boolean" },
+        "accountingFormat": { "type": "string", "enum": ["CSV", "QUICKBOOKS_IIF", "XERO_CSV"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "memberUids", "companyName", "seatLimit", "activeSeatCount", "userRole", "biometricBadgeEnabled", "calendarSyncEnabled", "accountingFormat", "createdAt", "updatedAt"]
+    },
+    "EmployeeRecord": {
+      "title": "EmployeeRecord",
+      "description": "Employee directory record within a 50-seat workspace.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "employeeCode": { "type": "string" },
+        "fullName": { "type": "string" },
+        "jobTitle": { "type": "string" },
+        "department": { "type": "string", "enum": ["Engineering", "Product", "Design", "Sales", "Operations", "People"] },
+        "role": { "type": "string", "enum": ["HR_ADMIN", "MANAGER", "EMPLOYEE"] },
+        "workEmail": { "type": "string" },
+        "workPhone": { "type": "string" },
+        "managerName": { "type": "string" },
+        "workMode": { "type": "string", "enum": ["HYBRID", "REMOTE", "ONSITE"] },
+        "shiftWindow": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "ON_LEAVE", "OFFBOARDING"] },
+        "baseMonthlySalary": { "type": "number" },
+        "annualLeaveBalance": { "type": "integer" },
+        "sickLeaveBalance": { "type": "integer" },
+        "documents": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "memberUids", "employeeCode", "fullName", "jobTitle", "department", "role", "workEmail", "workMode", "shiftWindow", "status", "baseMonthlySalary", "annualLeaveBalance", "sickLeaveBalance", "documents", "createdAt", "updatedAt"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Daily check-in/out time tracking record with GPS/selfie metadata.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "employeeName": { "type": "string" },
+        "department": { "type": "string" },
+        "dateLabel": { "type": "string" },
+        "checkInTime": { "type": "string" },
+        "checkOutTime": { "type": "string" },
+        "verificationMode": { "type": "string", "enum": ["ONE_TAP", "GPS", "SELFIE"] },
+        "locationLabel": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "selfieCaptured": { "type": "boolean" },
+        "shiftWindow": { "type": "string" },
+        "hoursWorked": { "type": "number" },
+        "status": { "type": "string", "enum": ["CHECKED_IN", "CHECKED_OUT", "LATE"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "memberUids", "employeeName", "department", "dateLabel", "checkInTime", "verificationMode", "latitude", "longitude", "selfieCaptured", "shiftWindow", "hoursWorked", "status", "createdAt", "updatedAt"]
+    },
+    "LeaveRequest": {
+      "title": "LeaveRequest",
+      "description": "Employee leave request and manager approval state.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "employeeName": { "type": "string" },
+        "department": { "type": "string" },
+        "leaveType": { "type": "string", "enum": ["ANNUAL", "SICK", "PARENTAL", "WFH"] },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "daysCount": { "type": "integer" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "reviewedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "memberUids", "employeeName", "department", "leaveType", "startDate", "endDate", "daysCount", "reason", "status", "createdAt", "updatedAt"]
+    },
+    "PayrollRecord": {
+      "title": "PayrollRecord",
+      "description": "Automated payroll run payslip record with statutory deductions.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "employeeName": { "type": "string" },
+        "employeeCode": { "type": "string" },
+        "department": { "type": "string" },
+        "periodLabel": { "type": "string" },
+        "basePay": { "type": "number" },
+        "overtimePay": { "type": "number" },
+        "taxDeduction": { "type": "number" },
+        "benefitsDeduction": { "type": "number" },
+        "netPay": { "type": "number" },
+        "daysWorked": { "type": "integer" },
+        "status": { "type": "string", "enum": ["SCHEDULED", "PAID"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "memberUids", "employeeName", "employeeCode", "department", "periodLabel", "basePay", "overtimePay", "taxDeduction", "benefitsDeduction", "netPay", "daysWorked", "status", "createdAt", "updatedAt"]
+    },
+    "OnboardingTask": {
+      "title": "OnboardingTask",
+      "description": "Digital checklist item for employee onboarding and offboarding.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "employeeName": { "type": "string" },
+        "flowType": { "type": "string", "enum": ["ONBOARDING", "OFFBOARDING"] },
+        "title": { "type": "string" },
+        "category": { "type": "string", "enum": ["IT_ACCESS", "POLICY", "BENEFITS", "EXIT"] },
+        "dueDate": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "memberUids", "employeeName", "flowType", "title", "category", "dueDate", "completed", "createdAt", "updatedAt"]
+    },
+    "ServiceItem": {
+      "title": "ServiceItem",
+      "description": "Self-service expense claim or HR helpdesk ticket.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "requesterName": { "type": "string" },
+        "kind": { "type": "string", "enum": ["EXPENSE", "TICKET"] },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "hasAttachment": { "type": "boolean" },
+        "attachmentLabel": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED", "IN_PROGRESS", "RESOLVED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "memberUids", "requesterName", "kind", "title", "category", "amount", "hasAttachment", "status", "createdAt", "updatedAt"]
+    },
+    "ChannelPost": {
+      "title": "ChannelPost",
+      "description": "Department channel message or cross-team announcement.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "channelId": { "type": "string", "enum": ["all-hands", "engineering", "product-design", "operations", "sales", "people-ops"] },
+        "authorName": { "type": "string" },
+        "authorRole": { "type": "string" },
+        "postType": { "type": "string", "enum": ["ANNOUNCEMENT", "DISCUSSION"] },
+        "body": { "type": "string" },
+        "ackCount": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "memberUids", "channelId", "authorName", "authorRole", "postType", "body", "ackCount", "createdAt", "updatedAt"]
+    },
+    "PerformanceItem": {
+      "title": "PerformanceItem",
+      "description": "OKR goal, appraisal feedback, or training compliance module.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "itemKind": { "type": "string", "enum": ["GOAL", "FEEDBACK", "TRAINING"] },
+        "title": { "type": "string" },
+        "assigneeName": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "progressPercent": { "type": "integer" },
+        "rating": { "type": "integer" },
+        "status": { "type": "string", "enum": ["ON_TRACK", "AT_RISK", "COMPLETED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "memberUids", "itemKind", "title", "assigneeName", "progressPercent", "rating", "status", "createdAt", "updatedAt"]
+    },
+    "AppNotification": {
+      "title": "AppNotification",
+      "description": "In-app HR alerts for approvals, shifts, and payroll.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "category": { "type": "string", "enum": ["APPROVAL", "ATTENDANCE", "PAYROLL", "CHANNEL", "SYSTEM"] },
+        "unread": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "memberUids", "title", "message", "category", "unread", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserPrivateProfile" },
+      "description": "Private PII and security profile isolated to the authenticated user."
+    },
+    "/workspaces/{workspaceId}": {
+      "schema": { "$ref": "#/entities/Workspace" },
+      "description": "50-seat organization workspace root document."
+    },
+    "/workspaces/{workspaceId}/employees/{employeeId}": {
+      "schema": { "$ref": "#/entities/EmployeeRecord" },
+      "description": "Workforce roster and employee profiles."
+    },
+    "/workspaces/{workspaceId}/attendance/{recordId}": {
+      "schema": { "$ref": "#/entities/AttendanceRecord" },
+      "description": "Attendance check-in/out logs."
+    },
+    "/workspaces/{workspaceId}/leave_requests/{leaveId}": {
+      "schema": { "$ref": "#/entities/LeaveRequest" },
+      "description": "Leave requests and approvals."
+    },
+    "/workspaces/{workspaceId}/payroll_runs/{payslipId}": {
+      "schema": { "$ref": "#/entities/PayrollRecord" },
+      "description": "Payroll runs and payslips."
+    },
+    "/workspaces/{workspaceId}/onboarding_tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/OnboardingTask" },
+      "description": "Onboarding and offboarding checklists."
+    },
+    "/workspaces/{workspaceId}/service_items/{itemId}": {
+      "schema": { "$ref": "#/entities/ServiceItem" },
+      "description": "Expense claims and HR support tickets."
+    },
+    "/workspaces/{workspaceId}/channel_posts/{postId}": {
+      "schema": { "$ref": "#/entities/ChannelPost" },
+      "description": "Department channel posts and cross-team announcements."
+    },
+    "/workspaces/{workspaceId}/performance_items/{perfId}": {
+      "schema": { "$ref": "#/entities/PerformanceItem" },
+      "description": "OKRs, peer feedback, and training modules."
+    },
+    "/workspaces/{workspaceId}/notifications/{notifId}": {
+      "schema": { "$ref": "#/entities/AppNotification" },
+      "description": "Workspace alerts and approval notifications."
+    }
+  }
+}

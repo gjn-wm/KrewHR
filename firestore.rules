@@ -1,0 +1,485 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isBoundedMemberList(list) {
+      return list is list &&
+             list.size() >= 1 &&
+             list.size() <= 50 &&
+             list[0] is string;
+    }
+
+    function isValidString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isOptionalString(data, key, maxLen) {
+      return !(key in data) || (data[key] is string && data[key].size() <= maxLen);
+    }
+
+    function isValidTimestamps(data) {
+      return data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isWorkspaceMember(workspaceId) {
+      return exists(/databases/$(database)/documents/workspaces/$(workspaceId)) &&
+             request.auth.uid in get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.memberUids;
+    }
+
+    // --- Entity Validators ---
+    function isValidUserPrivateProfile(data) {
+      return isValidString(data.userId, 1, 128) &&
+             isValidString(data.fullName, 1, 80) &&
+             isValidString(data.workEmail, 3, 120) &&
+             isOptionalString(data, 'phone', 30) &&
+             isOptionalString(data, 'homeAddress', 200) &&
+             isOptionalString(data, 'emergencyContact', 120) &&
+             isOptionalString(data, 'bankAccountLast4', 10) &&
+             data.taxFilingStatus in ['SINGLE', 'MARRIED', 'HEAD_OF_HOUSEHOLD'] &&
+             data.mfaLockEnabled is bool &&
+             isValidString(data.activeWorkspaceId, 0, 128) &&
+             isValidTimestamps(data);
+    }
+
+    function isValidWorkspace(data) {
+      return isValidString(data.ownerUid, 1, 128) &&
+             isBoundedMemberList(data.memberUids) &&
+             isValidString(data.companyName, 2, 80) &&
+             data.seatLimit is int && data.seatLimit >= 1 && data.seatLimit <= 50 &&
+             data.activeSeatCount is int && data.activeSeatCount >= 0 && data.activeSeatCount <= 50 &&
+             data.userRole in ['HR_ADMIN', 'MANAGER', 'EMPLOYEE'] &&
+             isOptionalString(data, 'slackWebhookUrl', 200) &&
+             data.biometricBadgeEnabled is bool &&
+             data.calendarSyncEnabled is bool &&
+             data.accountingFormat in ['CSV', 'QUICKBOOKS_IIF', 'XERO_CSV'] &&
+             isValidTimestamps(data);
+    }
+
+    function isValidEmployeeRecord(data) {
+      return isValidString(data.ownerUid, 1, 128) &&
+             isBoundedMemberList(data.memberUids) &&
+             isValidString(data.employeeCode, 2, 20) &&
+             isValidString(data.fullName, 2, 80) &&
+             isValidString(data.jobTitle, 2, 80) &&
+             data.department in ['Engineering', 'Product', 'Design', 'Sales', 'Operations', 'People'] &&
+             data.role in ['HR_ADMIN', 'MANAGER', 'EMPLOYEE'] &&
+             isValidString(data.workEmail, 3, 120) &&
+             isOptionalString(data, 'workPhone', 30) &&
+             isOptionalString(data, 'managerName', 80) &&
+             data.workMode in ['HYBRID', 'REMOTE', 'ONSITE'] &&
+             isValidString(data.shiftWindow, 3, 40) &&
+             data.status in ['ACTIVE', 'ON_LEAVE', 'OFFBOARDING'] &&
+             data.baseMonthlySalary is number && data.baseMonthlySalary >= 0 && data.baseMonthlySalary <= 1000000 &&
+             data.annualLeaveBalance is int && data.annualLeaveBalance >= 0 && data.annualLeaveBalance <= 60 &&
+             data.sickLeaveBalance is int && data.sickLeaveBalance >= 0 && data.sickLeaveBalance <= 30 &&
+             data.documents is list && data.documents.size() <= 10 &&
+             (data.documents.size() == 0 || data.documents[0] is string) &&
+             isValidTimestamps(data);
+    }
+
+    function isValidAttendanceRecord(data) {
+      return isValidString(data.ownerUid, 1, 128) &&
+             isBoundedMemberList(data.memberUids) &&
+             isValidString(data.employeeName, 2, 80) &&
+             isValidString(data.department, 2, 40) &&
+             isValidString(data.dateLabel, 4, 20) &&
+             isValidString(data.checkInTime, 2, 20) &&
+             isOptionalString(data, 'checkOutTime', 20) &&
+             data.verificationMode in ['ONE_TAP', 'GPS', 'SELFIE'] &&
+             isOptionalString(data, 'locationLabel', 120) &&
+             data.latitude is number && data.latitude >= -90 && data.latitude <= 90 &&
+             data.longitude is number && data.longitude >= -180 && data.longitude <= 180 &&
+             data.selfieCaptured is bool &&
+             isValidString(data.shiftWindow, 3, 40) &&
+             data.hoursWorked is number && data.hoursWorked >= 0 && data.hoursWorked <= 24 &&
+             data.status in ['CHECKED_IN', 'CHECKED_OUT', 'LATE'] &&
+             isValidTimestamps(data);
+    }
+
+    function isValidLeaveRequest(data) {
+      return isValidString(data.ownerUid, 1, 128) &&
+             isBoundedMemberList(data.memberUids) &&
+             isValidString(data.employeeName, 2, 80) &&
+             isValidString(data.department, 2, 40) &&
+             data.leaveType in ['ANNUAL', 'SICK', 'PARENTAL', 'WFH'] &&
+             isValidString(data.startDate, 4, 20) &&
+             isValidString(data.endDate, 4, 20) &&
+             data.daysCount is int && data.daysCount >= 1 && data.daysCount <= 60 &&
+             isValidString(data.reason, 2, 300) &&
+             data.status in ['PENDING', 'APPROVED', 'REJECTED'] &&
+             isOptionalString(data, 'reviewedBy', 80) &&
+             isValidTimestamps(data);
+    }
+
+    function isValidPayrollRecord(data) {
+      return isValidString(data.ownerUid, 1, 128) &&
+             isBoundedMemberList(data.memberUids) &&
+             isValidString(data.employeeName, 2, 80) &&
+             isValidString(data.employeeCode, 2, 20) &&
+             isValidString(data.department, 2, 40) &&
+             isValidString(data.periodLabel, 3, 40) &&
+             data.basePay is number && data.basePay >= 0 && data.basePay <= 1000000 &&
+             data.overtimePay is number && data.overtimePay >= 0 && data.overtimePay <= 200000 &&
+             data.taxDeduction is number && data.taxDeduction >= 0 && data.taxDeduction <= 500000 &&
+             data.benefitsDeduction is number && data.benefitsDeduction >= 0 && data.benefitsDeduction <= 100000 &&
+             data.netPay is number && data.netPay >= 0 && data.netPay <= 1200000 &&
+             data.daysWorked is int && data.daysWorked >= 0 && data.daysWorked <= 31 &&
+             data.status in ['SCHEDULED', 'PAID'] &&
+             isValidTimestamps(data);
+    }
+
+    function isValidOnboardingTask(data) {
+      return isValidString(data.ownerUid, 1, 128) &&
+             isBoundedMemberList(data.memberUids) &&
+             isValidString(data.employeeName, 2, 80) &&
+             data.flowType in ['ONBOARDING', 'OFFBOARDING'] &&
+             isValidString(data.title, 2, 120) &&
+             data.category in ['IT_ACCESS', 'POLICY', 'BENEFITS', 'EXIT'] &&
+             isValidString(data.dueDate, 2, 20) &&
+             data.completed is bool &&
+             isValidTimestamps(data);
+    }
+
+    function isValidServiceItem(data) {
+      return isValidString(data.ownerUid, 1, 128) &&
+             isBoundedMemberList(data.memberUids) &&
+             isValidString(data.requesterName, 2, 80) &&
+             data.kind in ['EXPENSE', 'TICKET'] &&
+             isValidString(data.title, 2, 120) &&
+             isValidString(data.category, 2, 40) &&
+             isOptionalString(data, 'description', 400) &&
+             data.amount is number && data.amount >= 0 && data.amount <= 100000 &&
+             data.hasAttachment is bool &&
+             isOptionalString(data, 'attachmentLabel', 120) &&
+             data.status in ['PENDING', 'APPROVED', 'REJECTED', 'IN_PROGRESS', 'RESOLVED'] &&
+             isValidTimestamps(data);
+    }
+
+    function isValidChannelPost(data) {
+      return isValidString(data.ownerUid, 1, 128) &&
+             isBoundedMemberList(data.memberUids) &&
+             data.channelId in ['all-hands', 'engineering', 'product-design', 'operations', 'sales', 'people-ops'] &&
+             isValidString(data.authorName, 2, 80) &&
+             isValidString(data.authorRole, 2, 40) &&
+             data.postType in ['ANNOUNCEMENT', 'DISCUSSION'] &&
+             isValidString(data.body, 1, 500) &&
+             data.ackCount is int && data.ackCount >= 0 && data.ackCount <= 10000 &&
+             isValidTimestamps(data);
+    }
+
+    function isValidPerformanceItem(data) {
+      return isValidString(data.ownerUid, 1, 128) &&
+             isBoundedMemberList(data.memberUids) &&
+             data.itemKind in ['GOAL', 'FEEDBACK', 'TRAINING'] &&
+             isValidString(data.title, 2, 120) &&
+             isValidString(data.assigneeName, 2, 80) &&
+             isOptionalString(data, 'subtitle', 300) &&
+             data.progressPercent is int && data.progressPercent >= 0 && data.progressPercent <= 100 &&
+             data.rating is int && data.rating >= 0 && data.rating <= 5 &&
+             data.status in ['ON_TRACK', 'AT_RISK', 'COMPLETED'] &&
+             isValidTimestamps(data);
+    }
+
+    function isValidAppNotification(data) {
+      return isValidString(data.ownerUid, 1, 128) &&
+             isBoundedMemberList(data.memberUids) &&
+             isValidString(data.title, 2, 100) &&
+             isValidString(data.message, 2, 250) &&
+             data.category in ['APPROVAL', 'ATTENDANCE', 'PAYROLL', 'CHANNEL', 'SYSTEM'] &&
+             data.unread is bool &&
+             isValidTimestamps(data);
+    }
+
+    // --- 1. Private User PII & Security Settings ---
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+      allow list: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'fullName', 'workEmail', 'taxFilingStatus', 'mfaLockEnabled', 'activeWorkspaceId', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'fullName', 'workEmail', 'phone', 'homeAddress', 'emergencyContact', 'bankAccountLast4', 'taxFilingStatus', 'mfaLockEnabled', 'activeWorkspaceId', 'createdAt', 'updatedAt']) &&
+                       isValidUserPrivateProfile(incoming());
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       isValidUserPrivateProfile(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'workEmail', 'phone', 'homeAddress', 'emergencyContact', 'bankAccountLast4', 'taxFilingStatus', 'mfaLockEnabled', 'activeWorkspaceId', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+    }
+
+    // --- 2. Organization Workspaces (50-seat scope) ---
+    match /workspaces/{workspaceId} {
+      allow get: if isSignedIn() && isValidId(workspaceId) && request.auth.uid in resource.data.memberUids;
+      allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+      allow create: if isSignedIn() &&
+                       isValidId(workspaceId) &&
+                       isValidWorkspace(incoming()) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       request.auth.uid in incoming().memberUids &&
+                       incoming().keys().hasAll(['ownerUid', 'memberUids', 'companyName', 'seatLimit', 'activeSeatCount', 'userRole', 'biometricBadgeEnabled', 'calendarSyncEnabled', 'accountingFormat', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['ownerUid', 'memberUids', 'companyName', 'seatLimit', 'activeSeatCount', 'userRole', 'slackWebhookUrl', 'biometricBadgeEnabled', 'calendarSyncEnabled', 'accountingFormat', 'createdAt', 'updatedAt']);
+      allow update: if isSignedIn() &&
+                       isValidId(workspaceId) &&
+                       isValidWorkspace(incoming()) &&
+                       request.auth.uid in existing().memberUids &&
+                       incoming().ownerUid == existing().ownerUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         (existing().ownerUid == request.auth.uid &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['companyName', 'seatLimit', 'activeSeatCount', 'userRole', 'slackWebhookUrl', 'biometricBadgeEnabled', 'calendarSyncEnabled', 'accountingFormat', 'memberUids', 'updatedAt'])) ||
+                         (incoming().diff(existing()).affectedKeys().hasOnly(['activeSeatCount', 'userRole', 'biometricBadgeEnabled', 'calendarSyncEnabled', 'accountingFormat', 'updatedAt']))
+                       );
+      allow delete: if isSignedIn() && isValidId(workspaceId) && existing().ownerUid == request.auth.uid;
+
+      // --- 2a. Employee Roster ---
+      match /employees/{employeeId} {
+        allow get: if isSignedIn() && isValidId(workspaceId) && isValidId(employeeId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+        allow create: if isSignedIn() &&
+                         isValidId(workspaceId) &&
+                         isValidId(employeeId) &&
+                         isValidEmployeeRecord(incoming()) &&
+                         incoming().ownerUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         incoming().keys().hasAll(['ownerUid', 'memberUids', 'employeeCode', 'fullName', 'jobTitle', 'department', 'role', 'workEmail', 'workMode', 'shiftWindow', 'status', 'baseMonthlySalary', 'annualLeaveBalance', 'sickLeaveBalance', 'documents', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['ownerUid', 'memberUids', 'employeeCode', 'fullName', 'jobTitle', 'department', 'role', 'workEmail', 'workPhone', 'managerName', 'workMode', 'shiftWindow', 'status', 'baseMonthlySalary', 'annualLeaveBalance', 'sickLeaveBalance', 'documents', 'createdAt', 'updatedAt']) &&
+                         isWorkspaceMember(workspaceId);
+        allow update: if isSignedIn() &&
+                         isValidId(workspaceId) &&
+                         isValidId(employeeId) &&
+                         isValidEmployeeRecord(incoming()) &&
+                         request.auth.uid in existing().memberUids &&
+                         incoming().ownerUid == existing().ownerUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'jobTitle', 'department', 'role', 'workEmail', 'workPhone', 'managerName', 'workMode', 'shiftWindow', 'status', 'baseMonthlySalary', 'annualLeaveBalance', 'sickLeaveBalance', 'documents', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(workspaceId) && isValidId(employeeId) && existing().ownerUid == request.auth.uid;
+      }
+
+      // --- 2b. Attendance & Time Tracking ---
+      match /attendance/{recordId} {
+        allow get: if isSignedIn() && isValidId(workspaceId) && isValidId(recordId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+        allow create: if isSignedIn() &&
+                         isValidId(workspaceId) &&
+                         isValidId(recordId) &&
+                         isValidAttendanceRecord(incoming()) &&
+                         incoming().ownerUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         incoming().keys().hasAll(['ownerUid', 'memberUids', 'employeeName', 'department', 'dateLabel', 'checkInTime', 'verificationMode', 'latitude', 'longitude', 'selfieCaptured', 'shiftWindow', 'hoursWorked', 'status', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['ownerUid', 'memberUids', 'employeeName', 'department', 'dateLabel', 'checkInTime', 'checkOutTime', 'verificationMode', 'locationLabel', 'latitude', 'longitude', 'selfieCaptured', 'shiftWindow', 'hoursWorked', 'status', 'createdAt', 'updatedAt']) &&
+                         isWorkspaceMember(workspaceId);
+        allow update: if isSignedIn() &&
+                         isValidId(workspaceId) &&
+                         isValidId(recordId) &&
+                         isValidAttendanceRecord(incoming()) &&
+                         request.auth.uid in existing().memberUids &&
+                         incoming().ownerUid == existing().ownerUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         existing().status != 'CHECKED_OUT' &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['checkOutTime', 'hoursWorked', 'status', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(workspaceId) && isValidId(recordId) && existing().ownerUid == request.auth.uid;
+      }
+
+      // --- 2c. Leave & Absence Requests (with Terminal State Locking) ---
+      match /leave_requests/{leaveId} {
+        allow get: if isSignedIn() && isValidId(workspaceId) && isValidId(leaveId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+        allow create: if isSignedIn() &&
+                         isValidId(workspaceId) &&
+                         isValidId(leaveId) &&
+                         isValidLeaveRequest(incoming()) &&
+                         incoming().ownerUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         incoming().keys().hasAll(['ownerUid', 'memberUids', 'employeeName', 'department', 'leaveType', 'startDate', 'endDate', 'daysCount', 'reason', 'status', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['ownerUid', 'memberUids', 'employeeName', 'department', 'leaveType', 'startDate', 'endDate', 'daysCount', 'reason', 'status', 'reviewedBy', 'createdAt', 'updatedAt']) &&
+                         isWorkspaceMember(workspaceId);
+        allow update: if isSignedIn() &&
+                         isValidId(workspaceId) &&
+                         isValidId(leaveId) &&
+                         isValidLeaveRequest(incoming()) &&
+                         request.auth.uid in existing().memberUids &&
+                         incoming().ownerUid == existing().ownerUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         existing().status == 'PENDING' &&
+                         incoming().status in ['APPROVED', 'REJECTED'] &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewedBy', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(workspaceId) && isValidId(leaveId) && existing().ownerUid == request.auth.uid;
+      }
+
+      // --- 2d. Payroll & Benefits Runs (Terminal Lock once PAID) ---
+      match /payroll_runs/{payslipId} {
+        allow get: if isSignedIn() && isValidId(workspaceId) && isValidId(payslipId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+        allow create: if isSignedIn() &&
+                         isValidId(workspaceId) &&
+                         isValidId(payslipId) &&
+                         isValidPayrollRecord(incoming()) &&
+                         incoming().ownerUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         incoming().keys().hasAll(['ownerUid', 'memberUids', 'employeeName', 'employeeCode', 'department', 'periodLabel', 'basePay', 'overtimePay', 'taxDeduction', 'benefitsDeduction', 'netPay', 'daysWorked', 'status', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['ownerUid', 'memberUids', 'employeeName', 'employeeCode', 'department', 'periodLabel', 'basePay', 'overtimePay', 'taxDeduction', 'benefitsDeduction', 'netPay', 'daysWorked', 'status', 'createdAt', 'updatedAt']) &&
+                         isWorkspaceMember(workspaceId);
+        allow update: if isSignedIn() &&
+                         isValidId(workspaceId) &&
+                         isValidId(payslipId) &&
+                         isValidPayrollRecord(incoming()) &&
+                         request.auth.uid in existing().memberUids &&
+                         incoming().ownerUid == existing().ownerUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         existing().status == 'SCHEDULED' &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['overtimePay', 'taxDeduction', 'benefitsDeduction', 'netPay', 'daysWorked', 'status', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(workspaceId) && isValidId(payslipId) && existing().ownerUid == request.auth.uid;
+      }
+
+      // --- 2e. Onboarding & Offboarding Checklists ---
+      match /onboarding_tasks/{taskId} {
+        allow get: if isSignedIn() && isValidId(workspaceId) && isValidId(taskId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+        allow create: if isSignedIn() &&
+                         isValidId(workspaceId) &&
+                         isValidId(taskId) &&
+                         isValidOnboardingTask(incoming()) &&
+                         incoming().ownerUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         incoming().keys().hasAll(['ownerUid', 'memberUids', 'employeeName', 'flowType', 'title', 'category', 'dueDate', 'completed', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['ownerUid', 'memberUids', 'employeeName', 'flowType', 'title', 'category', 'dueDate', 'completed', 'createdAt', 'updatedAt']) &&
+                         isWorkspaceMember(workspaceId);
+        allow update: if isSignedIn() &&
+                         isValidId(workspaceId) &&
+                         isValidId(taskId) &&
+                         isValidOnboardingTask(incoming()) &&
+                         request.auth.uid in existing().memberUids &&
+                         incoming().ownerUid == existing().ownerUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['completed', 'dueDate', 'title', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(workspaceId) && isValidId(taskId) && existing().ownerUid == request.auth.uid;
+      }
+
+      // --- 2f. Self-Service Expenses & HR Tickets ---
+      match /service_items/{itemId} {
+        allow get: if isSignedIn() && isValidId(workspaceId) && isValidId(itemId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+        allow create: if isSignedIn() &&
+                         isValidId(workspaceId) &&
+                         isValidId(itemId) &&
+                         isValidServiceItem(incoming()) &&
+                         incoming().ownerUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         incoming().keys().hasAll(['ownerUid', 'memberUids', 'requesterName', 'kind', 'title', 'category', 'amount', 'hasAttachment', 'status', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['ownerUid', 'memberUids', 'requesterName', 'kind', 'title', 'category', 'description', 'amount', 'hasAttachment', 'attachmentLabel', 'status', 'createdAt', 'updatedAt']) &&
+                         isWorkspaceMember(workspaceId);
+        allow update: if isSignedIn() &&
+                         isValidId(workspaceId) &&
+                         isValidId(itemId) &&
+                         isValidServiceItem(incoming()) &&
+                         request.auth.uid in existing().memberUids &&
+                         incoming().ownerUid == existing().ownerUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         !(existing().status in ['APPROVED', 'REJECTED', 'RESOLVED']) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'description', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(workspaceId) && isValidId(itemId) && existing().ownerUid == request.auth.uid;
+      }
+
+      // --- 2g. Department Channels & Cross-Team Forums ---
+      match /channel_posts/{postId} {
+        allow get: if isSignedIn() && isValidId(workspaceId) && isValidId(postId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+        allow create: if isSignedIn() &&
+                         isValidId(workspaceId) &&
+                         isValidId(postId) &&
+                         isValidChannelPost(incoming()) &&
+                         incoming().ownerUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         incoming().keys().hasAll(['ownerUid', 'memberUids', 'channelId', 'authorName', 'authorRole', 'postType', 'body', 'ackCount', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['ownerUid', 'memberUids', 'channelId', 'authorName', 'authorRole', 'postType', 'body', 'ackCount', 'createdAt', 'updatedAt']) &&
+                         isWorkspaceMember(workspaceId);
+        allow update: if isSignedIn() &&
+                         isValidId(workspaceId) &&
+                         isValidId(postId) &&
+                         isValidChannelPost(incoming()) &&
+                         request.auth.uid in existing().memberUids &&
+                         incoming().ownerUid == existing().ownerUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['ackCount', 'body', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(workspaceId) && isValidId(postId) && existing().ownerUid == request.auth.uid;
+      }
+
+      // --- 2h. Performance, Goals & Learning ---
+      match /performance_items/{perfId} {
+        allow get: if isSignedIn() && isValidId(workspaceId) && isValidId(perfId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+        allow create: if isSignedIn() &&
+                         isValidId(workspaceId) &&
+                         isValidId(perfId) &&
+                         isValidPerformanceItem(incoming()) &&
+                         incoming().ownerUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         incoming().keys().hasAll(['ownerUid', 'memberUids', 'itemKind', 'title', 'assigneeName', 'progressPercent', 'rating', 'status', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['ownerUid', 'memberUids', 'itemKind', 'title', 'assigneeName', 'subtitle', 'progressPercent', 'rating', 'status', 'createdAt', 'updatedAt']) &&
+                         isWorkspaceMember(workspaceId);
+        allow update: if isSignedIn() &&
+                         isValidId(workspaceId) &&
+                         isValidId(perfId) &&
+                         isValidPerformanceItem(incoming()) &&
+                         request.auth.uid in existing().memberUids &&
+                         incoming().ownerUid == existing().ownerUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['progressPercent', 'rating', 'status', 'subtitle', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(workspaceId) && isValidId(perfId) && existing().ownerUid == request.auth.uid;
+      }
+
+      // --- 2i. Workspace Notifications ---
+      match /notifications/{notifId} {
+        allow get: if isSignedIn() && isValidId(workspaceId) && isValidId(notifId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+        allow create: if isSignedIn() &&
+                         isValidId(workspaceId) &&
+                         isValidId(notifId) &&
+                         isValidAppNotification(incoming()) &&
+                         incoming().ownerUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         incoming().keys().hasAll(['ownerUid', 'memberUids', 'title', 'message', 'category', 'unread', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['ownerUid', 'memberUids', 'title', 'message', 'category', 'unread', 'createdAt', 'updatedAt']) &&
+                         isWorkspaceMember(workspaceId);
+        allow update: if isSignedIn() &&
+                         isValidId(workspaceId) &&
+                         isValidId(notifId) &&
+                         isValidAppNotification(incoming()) &&
+                         request.auth.uid in existing().memberUids &&
+                         incoming().ownerUid == existing().ownerUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['unread', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(workspaceId) && isValidId(notifId) && existing().ownerUid == request.auth.uid;
+      }
+    }
+  }
+}
